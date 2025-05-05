@@ -1,0 +1,2 @@
+export REMOTE_SERVER_HOST="hostname"
+export REMOTE_SERVER_PATH="/path/to/project" 
