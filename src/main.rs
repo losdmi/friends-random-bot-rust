@@ -10,7 +10,8 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
-type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+type Error = Box<dyn std::error::Error + Send + Sync>;
+type HandlerResult = Result<(), Error>;
 
 #[derive(Clone, Copy)]
 enum MainKeyboardButtons {
@@ -107,7 +108,7 @@ async fn main() {
         .await;
 }
 
-fn build_handler() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
+fn build_handler() -> UpdateHandler<Error> {
     use dptree::case;
 
     dptree::entry()
