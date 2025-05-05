@@ -18,15 +18,6 @@ enum MainKeyboardButtons {
     ListSeenEpisodes,
 }
 
-// impl Into<String> for MainKeyboardButtons {
-//     fn into(self) -> String {
-//         match self {
-//             MainKeyboardButtons::Moar => String::from("Ещё серию"),
-//             MainKeyboardButtons::ListSeenEpisodes => String::from("Просмотренные серии"),
-//         }
-//     }
-// }
-
 impl From<MainKeyboardButtons> for String {
     fn from(value: MainKeyboardButtons) -> Self {
         match value {
@@ -35,15 +26,6 @@ impl From<MainKeyboardButtons> for String {
         }
     }
 }
-
-// impl Into<&str> for MainKeyboardButtons {
-//     fn into(self) -> &'static str {
-//         match self {
-//             MainKeyboardButtons::Moar => "Ещё серию",
-//             MainKeyboardButtons::ListSeenEpisodes => "Просмотренные серии",
-//         }
-//     }
-// }
 
 impl Display for MainKeyboardButtons {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -167,22 +149,14 @@ async fn next_episode_handler(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 async fn callback_handler(bot: Bot, q: CallbackQuery) -> HandlerResult {
-    let data = q
-        .data
-        .as_ref()
-        .expect("q.data must be not empty");
+    let data = q.data.as_ref().expect("q.data must be not empty");
 
     log::info!("in callback_handler: data={data}");
 
-    bot.answer_callback_query(&q.id)
-        .text("✅")
-        .await?;
+    bot.answer_callback_query(&q.id).text("✅").await?;
 
     if let Some(message) = q.regular_message() {
-        let text = message
-            .text()
-            .unwrap()
-            .to_string();
+        let text = message.text().unwrap().to_string();
         bot.edit_text(message, format!("{text}\n\n✅ Просмотрено"))
             .await?;
     }
@@ -191,9 +165,7 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> HandlerResult {
 }
 
 async fn message_handler(bot: Bot, msg: Message) -> HandlerResult {
-    let text = msg
-        .text()
-        .expect("message must not be empty");
+    let text = msg.text().expect("message must not be empty");
 
     if text == MainKeyboardButtons::Moar.to_string() {
         send_next_episode_message(bot, msg).await?;
@@ -210,12 +182,8 @@ fn send_help_message(
     bot: Bot,
     msg: Message,
 ) -> teloxide::requests::JsonRequest<teloxide::payloads::SendMessage> {
-    bot.send_message(
-        msg.chat
-            .id,
-        Command::descriptions().to_string(),
-    )
-    .reply_markup(build_main_keyboard())
+    bot.send_message(msg.chat.id, Command::descriptions().to_string())
+        .reply_markup(build_main_keyboard())
 }
 
 fn send_next_episode_message(
@@ -235,10 +203,6 @@ url
         "mark_seen=s01e03",
     )]]);
 
-    bot.send_message(
-        msg.chat
-            .id,
-        response,
-    )
-    .reply_markup(keyboard)
+    bot.send_message(msg.chat.id, response)
+        .reply_markup(keyboard)
 }
