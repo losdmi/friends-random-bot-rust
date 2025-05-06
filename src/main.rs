@@ -166,7 +166,13 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> HandlerResult {
 }
 
 async fn message_handler(bot: Bot, msg: Message) -> HandlerResult {
-    let text = msg.text().expect("message must not be empty");
+    let text = match msg.text() {
+        Some(text) => text,
+        None => {
+            send_help_message(bot, msg).await?;
+            return Ok(());
+        }
+    };
 
     if text == MainKeyboardButtons::Moar.to_string() {
         send_next_episode_message(bot, msg).await?;
@@ -194,7 +200,7 @@ fn send_next_episode_message(
     let response = r#"
 Предлагаю посмотреть:
 
-Сезон 1, Серия 3
+Сезон 1 серия 3
 
 url
 "#;

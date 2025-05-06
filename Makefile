@@ -1,3 +1,4 @@
+PROJECT := friends-random-bot-rust
 TARGET := x86_64-unknown-linux-gnu
 
 .PHONY: run
@@ -24,7 +25,30 @@ build:
 upload_to_server:
 	@test -n "$(REMOTE_SERVER_HOST)" || (echo "Error: env REMOTE_SERVER_HOST is not set"; exit 1)
 	@test -n "$(REMOTE_SERVER_PATH)" || (echo "Error: env REMOTE_SERVER_PATH is not set"; exit 1)
-	scp target/$(TARGET)/release/friends-random-bot-rust $(REMOTE_SERVER_HOST):$(REMOTE_SERVER_PATH)
+	
+	$(MAKE) service_stop; true
+	scp systemd.service $(REMOTE_SERVER_HOST):/etc/systemd/system/$(PROJECT).service
+	ssh $(REMOTE_SERVER_HOST) "systemctl daemon-reload"
+	scp target/$(TARGET)/release/$(PROJECT) $(REMOTE_SERVER_HOST):$(REMOTE_SERVER_PATH)
+	ssh $(REMOTE_SERVER_HOST) "systemctl enable $(PROJECT).service"
+	$(MAKE) service_start
 
 .PHONY: build_and_upload_to_server
 build_and_upload_to_server: build upload_to_server
+
+.PHONY: service_stop
+service_stop:
+	ssh $(REMOTE_SERVER_HOST) "systemctl stop $(PROJECT).service"
+
+.PHONY: service_start
+service_start:
+	ssh $(REMOTE_SERVER_HOST) "systemctl start $(PROJECT).service"
+
+.PHONY: service_status
+service_status:
+	ssh $(REMOTE_SERVER_HOST) "systemctl status $(PROJECT).service"
+
+.PHONY: service_watch
+service_logs:
+	ssh $(REMOTE_SERVER_HOST) "journalctl -u $(PROJECT) -f"
+
