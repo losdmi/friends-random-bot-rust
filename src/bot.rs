@@ -1,4 +1,5 @@
-use std::fmt::Display;
+use crate::application;
+use std::{fmt::Display, sync::Arc};
 use teloxide::{
     dispatching::UpdateHandler,
     prelude::*,
@@ -48,7 +49,10 @@ enum Command {
     ListSeenEpisodes,
 }
 
-pub async fn new(bot_token: String) -> Dispatcher<Bot, Error, teloxide::dispatching::DefaultKey> {
+pub async fn new(
+    bot_token: String,
+    application: Arc<application::Bot>,
+) -> Dispatcher<Bot, Error, teloxide::dispatching::DefaultKey> {
     let bot = Bot::new(bot_token);
 
     bot.set_chat_menu_button()
@@ -62,6 +66,7 @@ pub async fn new(bot_token: String) -> Dispatcher<Bot, Error, teloxide::dispatch
         .unwrap();
 
     Dispatcher::builder(bot, build_handler())
+        .dependencies(dptree::deps![application])
         .default_handler(|upd| async move {
             log::warn!(
                 "Unhandled update: {}",
@@ -101,7 +106,9 @@ async fn start_handler(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-async fn help_handler(bot: Bot, msg: Message) -> HandlerResult {
+async fn help_handler(bot: Bot, msg: Message, application: Arc<application::Bot>) -> HandlerResult {
+    log::info!("{}", application.0);
+
     send_help_message(bot, msg).await?;
 
     Ok(())

@@ -1,6 +1,6 @@
-use friends_random_bot_rust::{bot, config};
+use friends_random_bot_rust::{application, bot, config};
 use log::LevelFilter;
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 #[tokio::main]
 async fn main() {
@@ -18,6 +18,11 @@ async fn main() {
         }
     };
 
+    let application = Arc::new(application::Bot::new());
+
     log::info!("Starting bot...");
-    bot::new(config.bot_token).await.dispatch().await;
+    bot::new(config.bot_token, application)
+        .await
+        .dispatch()
+        .await;
 }
