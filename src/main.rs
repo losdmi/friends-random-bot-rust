@@ -1,7 +1,6 @@
-use config;
+use friends_random_bot_rust::config;
 use log::LevelFilter;
-use serde::Deserialize;
-use std::fmt::Display;
+use std::{fmt::Display, path::Path};
 use teloxide::{
     dispatching::UpdateHandler,
     prelude::*,
@@ -51,20 +50,6 @@ enum Command {
     ListSeenEpisodes,
 }
 
-#[derive(Debug, Deserialize)]
-struct Config {
-    bot_token: String,
-}
-
-impl Config {
-    fn new() -> Result<Self, config::ConfigError> {
-        config::Config::builder()
-            .add_source(config::File::with_name("config.json").required(true))
-            .build()?
-            .try_deserialize()
-    }
-}
-
 #[tokio::main]
 async fn main() {
     env_logger::Builder::new()
@@ -73,7 +58,7 @@ async fn main() {
         .init();
 
     log::info!("Reading config...");
-    let config = match Config::new() {
+    let config = match config::new(Path::new("config.json")) {
         Ok(config) => config,
         Err(err) => {
             log::error!("{err}");
