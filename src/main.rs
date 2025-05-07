@@ -1,4 +1,4 @@
-use friends_random_bot_rust::{application, bot, config};
+use friends_random_bot_rust::{application, bot, config, watch_url_provider};
 use log::LevelFilter;
 use std::{path::Path, sync::Arc};
 
@@ -18,10 +18,13 @@ async fn main() {
         }
     };
 
-    let application = Arc::new(application::new());
+    let application = Arc::new(application::new(config.storage_path));
+    let watch_url_provider = Arc::new(watch_url_provider::provider_1::new(
+        config.watch_url_template,
+    ));
 
     log::info!("Starting bot...");
-    bot::new(config.bot_token, application)
+    bot::new(config.bot_token, application, watch_url_provider)
         .await
         .dispatch()
         .await;

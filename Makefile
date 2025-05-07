@@ -7,6 +7,7 @@ run: test
 
 .PHONY: test
 test: lint
+	cargo test
 
 .PHONY: lint
 lint:

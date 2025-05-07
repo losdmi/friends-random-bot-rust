@@ -1,8 +1,13 @@
-use crate::application;
+use crate::{
+    application::{self, Application},
+    watch_url_provider::WatchURLProvider,
+};
 use std::{fmt::Display, sync::Arc};
 use teloxide::{
     dispatching::UpdateHandler,
+    payloads::SendMessage,
     prelude::*,
+    requests::JsonRequest,
     sugar::bot::BotMessagesExt,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup},
     utils::command::BotCommands,
@@ -52,6 +57,7 @@ enum Command {
 pub async fn new(
     bot_token: String,
     application: Arc<application::Application>,
+    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
 ) -> Dispatcher<Bot, Error, teloxide::dispatching::DefaultKey> {
     let bot = Bot::new(bot_token);
 
@@ -66,7 +72,7 @@ pub async fn new(
         .expect("не удалось установить список команд для бота");
 
     Dispatcher::builder(bot, build_handler())
-        .dependencies(dptree::deps![application])
+        .dependencies(dptree::deps![application, watch_url_provider])
         .default_handler(default_handler)
         .enable_ctrlc_handler()
         .build()
@@ -113,20 +119,19 @@ async fn start_handler(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-async fn help_handler(
-    bot: Bot,
-    msg: Message,
-    application: Arc<application::Application>,
-) -> HandlerResult {
-    log::info!("{}", application.0);
-
+async fn help_handler(bot: Bot, msg: Message) -> HandlerResult {
     send_help_message(bot, msg).await?;
 
     Ok(())
 }
 
-async fn next_episode_handler(bot: Bot, msg: Message) -> HandlerResult {
-    send_next_episode_message(bot, msg).await?;
+async fn next_episode_handler(
+    bot: Bot,
+    msg: Message,
+    application: Arc<Application>,
+    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
+) -> HandlerResult {
+    send_next_episode_message(bot, msg, application, watch_url_provider)?.await?;
 
     Ok(())
 }
@@ -154,7 +159,12 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> HandlerResult {
     Ok(())
 }
 
-async fn message_handler(bot: Bot, msg: Message) -> HandlerResult {
+async fn message_handler(
+    bot: Bot,
+    msg: Message,
+    application: Arc<Application>,
+    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
+) -> HandlerResult {
     let text = match msg.text() {
         Some(text) => text,
         None => {
@@ -164,7 +174,7 @@ async fn message_handler(bot: Bot, msg: Message) -> HandlerResult {
     };
 
     if text == MainKeyboardButtons::Moar.to_string() {
-        send_next_episode_message(bot, msg).await?;
+        send_next_episode_message(bot, msg, application, watch_url_provider)?.await?;
     } else if text == MainKeyboardButtons::ListSeenEpisodes.to_string() {
         log::info!("processing list seen episodes");
     } else {
@@ -174,10 +184,7 @@ async fn message_handler(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-fn send_help_message(
-    bot: Bot,
-    msg: Message,
-) -> teloxide::requests::JsonRequest<teloxide::payloads::SendMessage> {
+fn send_help_message(bot: Bot, msg: Message) -> JsonRequest<SendMessage> {
     bot.send_message(msg.chat.id, Command::descriptions().to_string())
         .reply_markup(build_main_keyboard())
 }
@@ -185,20 +192,32 @@ fn send_help_message(
 fn send_next_episode_message(
     bot: Bot,
     msg: Message,
-) -> teloxide::requests::JsonRequest<teloxide::payloads::SendMessage> {
-    let response = r#"
+    application: Arc<Application>,
+    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
+) -> Result<JsonRequest<SendMessage>, application::error::Error> {
+    let user = msg.from.expect("should not be None at this point");
+    let next_episode = application.get_next_episode(application::UserID::new(user.id.0))?;
+
+    let watch_url = watch_url_provider.build_url(&next_episode);
+
+    let response = format!(
+        r#"
 Предлагаю посмотреть:
 
-Сезон 1 серия 3
+Сезон {} серия {}
 
-url
-"#;
+{watch_url}
+"#,
+        next_episode.season(),
+        next_episode.episode(),
+    );
 
     let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
         "Посмотрел",
-        "mark_seen=s01e03",
+        format!("mark_seen={}", next_episode.code()),
     )]]);
 
-    bot.send_message(msg.chat.id, response)
-        .reply_markup(keyboard)
+    Ok(bot
+        .send_message(msg.chat.id, response.trim())
+        .reply_markup(keyboard))
 }

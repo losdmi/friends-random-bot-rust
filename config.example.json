@@ -1,3 +1,5 @@
 {
-    "bot_token": "<BOT TOKEN from https://t.me/BotFather>"
+    "bot_token": "<BOT TOKEN from https://t.me/BotFather>",
+    "storage_path": "seen_episodes",
+    "watch_url_template": ""
 }
