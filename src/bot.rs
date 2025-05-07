@@ -51,7 +51,7 @@ enum Command {
 
 pub async fn new(
     bot_token: String,
-    application: Arc<application::Bot>,
+    application: Arc<application::Application>,
 ) -> Dispatcher<Bot, Error, teloxide::dispatching::DefaultKey> {
     let bot = Bot::new(bot_token);
 
@@ -59,20 +59,15 @@ pub async fn new(
         .menu_button(teloxide::types::MenuButton::Commands)
         .send()
         .await
-        .unwrap();
+        .expect("не удалось установить тип меню бота");
     bot.set_my_commands(Command::bot_commands())
         .send()
         .await
-        .unwrap();
+        .expect("не удалось установить список команд для бота");
 
     Dispatcher::builder(bot, build_handler())
         .dependencies(dptree::deps![application])
-        .default_handler(|upd| async move {
-            log::warn!(
-                "Unhandled update: {}",
-                serde_json::to_string(upd.as_ref()).unwrap()
-            );
-        })
+        .default_handler(default_handler)
         .enable_ctrlc_handler()
         .build()
 }
@@ -92,6 +87,18 @@ fn build_handler() -> UpdateHandler<Error> {
         .branch(Update::filter_message().endpoint(message_handler))
 }
 
+async fn default_handler(upd: Arc<Update>) {
+    let upd_as_json = match serde_json::to_string(upd.as_ref()) {
+        Ok(json) => json,
+        Err(err) => {
+            log::error!("error while converting Update to json: {}", err);
+            return;
+        }
+    };
+
+    log::warn!("Unhandled update: {}", upd_as_json);
+}
+
 fn build_main_keyboard() -> KeyboardMarkup {
     KeyboardMarkup::new(vec![
         vec![KeyboardButton::new(MainKeyboardButtons::Moar)],
@@ -106,7 +113,11 @@ async fn start_handler(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-async fn help_handler(bot: Bot, msg: Message, application: Arc<application::Bot>) -> HandlerResult {
+async fn help_handler(
+    bot: Bot,
+    msg: Message,
+    application: Arc<application::Application>,
+) -> HandlerResult {
     log::info!("{}", application.0);
 
     send_help_message(bot, msg).await?;
@@ -121,17 +132,24 @@ async fn next_episode_handler(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 async fn callback_handler(bot: Bot, q: CallbackQuery) -> HandlerResult {
-    let data = q.data.as_ref().expect("q.data must be not empty");
+    let Some(data) = q.data.as_ref() else {
+        log::error!("получили пустое поле data в колбеке");
+        return Ok(());
+    };
 
     log::info!("in callback_handler: data={data}");
 
     bot.answer_callback_query(&q.id).text("✅").await?;
 
-    if let Some(message) = q.regular_message() {
-        let text = message.text().unwrap().to_string();
-        bot.edit_text(message, format!("{text}\n\n✅ Просмотрено"))
-            .await?;
-    }
+    let Some(message) = q.regular_message() else {
+        return Ok(());
+    };
+    let Some(text) = message.text() else {
+        return Ok(());
+    };
+
+    bot.edit_text(message, format!("{text}\n\n✅ Просмотрено"))
+        .await?;
 
     Ok(())
 }

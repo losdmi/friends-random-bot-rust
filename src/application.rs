@@ -1,7 +1,5 @@
-pub struct Bot(pub String);
+pub struct Application(pub String);
 
-impl Bot {
-    pub fn new() -> Self {
-        Bot(String::from("qwe"))
-    }
+pub fn new() -> Application {
+    Application(String::from("qwe"))
 }

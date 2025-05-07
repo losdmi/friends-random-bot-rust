@@ -18,7 +18,7 @@ async fn main() {
         }
     };
 
-    let application = Arc::new(application::Bot::new());
+    let application = Arc::new(application::new());
 
     log::info!("Starting bot...");
     bot::new(config.bot_token, application)

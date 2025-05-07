@@ -8,10 +8,9 @@ run: test
 .PHONY: test
 test: lint
 
-
 .PHONY: lint
 lint:
-	cargo check
+	cargo clippy
 
 .PHONY: clean
 clean:
