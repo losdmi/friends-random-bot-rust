@@ -1,6 +1,6 @@
 use crate::{
-    application::{self, Application},
-    watch_url_provider::WatchURLProvider,
+    application::{self, Application, Episode},
+    watch_url_provider,
 };
 use std::{fmt::Display, sync::Arc};
 use teloxide::{
@@ -15,6 +15,7 @@ use teloxide::{
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type HandlerResult = Result<(), Error>;
+type WatchURLProvider = dyn watch_url_provider::WatchURLProvider + Send + Sync;
 
 #[derive(Clone, Copy)]
 enum MainKeyboardButtons {
@@ -57,7 +58,7 @@ enum Command {
 pub async fn new(
     bot_token: String,
     application: Arc<application::Application>,
-    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
+    watch_url_provider: Arc<WatchURLProvider>,
 ) -> Dispatcher<Bot, Error, teloxide::dispatching::DefaultKey> {
     let bot = Bot::new(bot_token);
 
@@ -129,22 +130,42 @@ async fn next_episode_handler(
     bot: Bot,
     msg: Message,
     application: Arc<Application>,
-    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
+    watch_url_provider: Arc<WatchURLProvider>,
 ) -> HandlerResult {
     send_next_episode_message(bot, msg, application, watch_url_provider)?.await?;
 
     Ok(())
 }
 
-async fn callback_handler(bot: Bot, q: CallbackQuery) -> HandlerResult {
+async fn callback_handler(
+    bot: Bot,
+    q: CallbackQuery,
+    application: Arc<Application>,
+) -> HandlerResult {
+    bot.answer_callback_query(&q.id).text("✅").await?;
+
     let Some(data) = q.data.as_ref() else {
         log::error!("получили пустое поле data в колбеке");
         return Ok(());
     };
 
-    log::info!("in callback_handler: data={data}");
+    let splitted: Vec<&str> = data.split("=").collect();
+    if splitted.len() != 2 {
+        // ожидаем что в data лежит строка вида `mark_seen=<episode_code>`
+        log::warn!("почему-то в data не то что ожидали: data={}", data);
+        return Ok(());
+    }
 
-    bot.answer_callback_query(&q.id).text("✅").await?;
+    let command = splitted[0];
+    if command != "mark_seen" {
+        log::warn!("почему-то в command не то что ожидали: command={}", command);
+        return Ok(());
+    }
+
+    application.mark_seen(
+        application::UserID::new(q.from.id.0),
+        Episode::from(splitted[1]),
+    )?;
 
     let Some(message) = q.regular_message() else {
         return Ok(());
@@ -163,7 +184,7 @@ async fn message_handler(
     bot: Bot,
     msg: Message,
     application: Arc<Application>,
-    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
+    watch_url_provider: Arc<WatchURLProvider>,
 ) -> HandlerResult {
     let text = match msg.text() {
         Some(text) => text,
@@ -193,7 +214,7 @@ fn send_next_episode_message(
     bot: Bot,
     msg: Message,
     application: Arc<Application>,
-    watch_url_provider: Arc<dyn WatchURLProvider + Send + Sync>,
+    watch_url_provider: Arc<WatchURLProvider>,
 ) -> Result<JsonRequest<SendMessage>, application::error::Error> {
     let user = msg.from.expect("should not be None at this point");
     let next_episode = application.get_next_episode(application::UserID::new(user.id.0))?;

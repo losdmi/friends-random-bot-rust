@@ -6,11 +6,12 @@ pub use episode::Episode;
 use episodes::EPISODES;
 use error::Error;
 use rand::seq::IndexedRandom;
+use std::fs;
 use std::{
     fmt::Display,
     fs::File,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 pub fn new(storage_path: PathBuf) -> Application {
@@ -38,8 +39,7 @@ pub struct Application {
 impl Application {
     pub fn get_next_episode(&self, user_id: UserID) -> Result<Episode, Error> {
         let user_storage_path = self.build_user_storage_path(user_id);
-        let seen_episodes = self.read_db_from_file(user_storage_path)?;
-
+        let seen_episodes = self.read_db_from_file(&user_storage_path)?;
         let selected_episode = self.select_next_episode(&seen_episodes)?;
 
         Ok(selected_episode)
@@ -49,7 +49,7 @@ impl Application {
         self.storage_path.join(format!("{user_id}.txt"))
     }
 
-    fn read_db_from_file(&self, path: PathBuf) -> Result<Vec<Episode>, std::io::Error> {
+    fn read_db_from_file(&self, path: &Path) -> Result<Vec<Episode>, std::io::Error> {
         let mut file = match File::open(path) {
             Ok(file) => file,
             Err(err) => match err.kind() {
@@ -82,11 +82,54 @@ impl Application {
             None => Err(Error::NoUnseenEpisodes),
         }
     }
+
+    pub fn mark_seen(&self, user_id: UserID, episode: Episode) -> Result<(), Error> {
+        let user_storage_path = self.build_user_storage_path(user_id);
+        let mut seen_episodes = self.read_db_from_file(&user_storage_path)?;
+
+        seen_episodes.push(episode);
+
+        self.save_db_to_file(seen_episodes, &user_storage_path)?;
+
+        Ok(())
+    }
+
+    fn save_db_to_file(
+        &self,
+        seen_episodes: Vec<Episode>,
+        path: &Path,
+    ) -> Result<(), std::io::Error> {
+        if seen_episodes.is_empty() {
+            return Ok(());
+        }
+
+        if let Some(parent) = path.parent() {
+            self.create_directory_if_not_exists(parent)?;
+        }
+
+        let mut file = File::create(path)?;
+
+        write!(
+            file,
+            "{}",
+            seen_episodes
+                .iter()
+                .fold(String::new(), |acc, ep| format!("{}\n{}", ep.code(), acc))
+        )?;
+
+        Ok(())
+    }
+
+    fn create_directory_if_not_exists(&self, path: &Path) -> Result<(), std::io::Error> {
+        fs::create_dir_all(path)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use tempfile::NamedTempFile;
+    use tempfile::{NamedTempFile, TempDir};
 
     use super::*;
 
@@ -111,7 +154,7 @@ mod test {
     fn application_read_db_from_file_fn_works_with_non_existing_file() {
         let a = build_application();
 
-        let result = a.read_db_from_file("non_existing_file.txt".into());
+        let result = a.read_db_from_file(Path::new("non_existing_file.txt"));
 
         assert!(!result.is_err(), "result is error: {result:#?}");
         assert_eq!(result.unwrap(), Vec::<Episode>::new());
@@ -122,7 +165,7 @@ mod test {
         let a = build_application();
         let tmpfile = NamedTempFile::new().unwrap();
 
-        let result = a.read_db_from_file(tmpfile.path().to_path_buf());
+        let result = a.read_db_from_file(tmpfile.path());
         assert!(!result.is_err(), "result is error: {result:#?}");
         assert_eq!(result.unwrap(), Vec::<Episode>::new());
     }
@@ -133,7 +176,7 @@ mod test {
         let mut tmpfile = NamedTempFile::new().unwrap();
         writeln!(tmpfile, "s01e02\ns01e01\n").unwrap();
 
-        let result = a.read_db_from_file(tmpfile.path().to_path_buf());
+        let result = a.read_db_from_file(tmpfile.path());
         assert!(!result.is_err(), "result is error: {result:#?}");
         assert_eq!(
             result.unwrap(),
@@ -159,5 +202,82 @@ mod test {
         let result = a.select_next_episode(&all_episodes);
 
         assert!(matches!(result, Err(Error::NoUnseenEpisodes)));
+    }
+
+    #[test]
+    fn application_save_db_to_file_fn_saves_empty_list_to_file() {
+        let a = build_application();
+
+        let mut tmpfile = NamedTempFile::new().unwrap();
+
+        let result = a.save_db_to_file(Vec::new(), &tmpfile.path());
+        assert!(!result.is_err(), "result is error: {result:#?}");
+
+        let mut tmpfile_content = String::new();
+        tmpfile.read_to_string(&mut tmpfile_content).unwrap();
+        assert_eq!(tmpfile_content, "");
+    }
+
+    #[test]
+    fn application_save_db_to_file_fn_saves_non_empty_list_to_file_in_reverse_order() {
+        let a = build_application();
+
+        let mut tmpfile = NamedTempFile::new().unwrap();
+
+        let seen_episodes = vec![Episode::from("s01e01"), Episode::from("s01e02")];
+
+        let result = a.save_db_to_file(seen_episodes, &tmpfile.path());
+        assert!(!result.is_err(), "result is error: {result:#?}");
+
+        let mut tmpfile_content = String::new();
+        tmpfile.read_to_string(&mut tmpfile_content).unwrap();
+        assert_eq!(tmpfile_content, "s01e02\ns01e01\n");
+    }
+
+    #[test]
+    fn application_create_directory_if_not_exists_fn_creates_multiple_directories() {
+        let a = build_application();
+
+        let tmpdir = TempDir::new().unwrap();
+
+        let path = tmpdir.path().join("some/path");
+        eprintln!("{}", path.to_string_lossy());
+        assert!(!path.exists());
+
+        let result = a.create_directory_if_not_exists(&path);
+        assert!(!result.is_err(), "result is error: {result:#?}");
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn application_create_directory_if_not_exists_fn_does_not_error_if_directories_already_exists()
+    {
+        let a = build_application();
+
+        // Setup temp directory
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let test_path = temp_dir.path().join("existing").join("subdirectory");
+
+        // First create the directory structure
+        fs::create_dir_all(&test_path).expect("Failed to create initial directory structure");
+
+        // Test the function - should not error even though dir exists
+        let result = a.create_directory_if_not_exists(&test_path);
+
+        // Verify
+        assert!(
+            result.is_ok(),
+            "Function should not error when directory already exists"
+        );
+
+        // Additional verification that directory still exists
+        assert!(
+            test_path.exists(),
+            "Directory should still exist after function call"
+        );
+        assert!(
+            test_path.is_dir(),
+            "Path should still be a directory after function call"
+        );
     }
 }
