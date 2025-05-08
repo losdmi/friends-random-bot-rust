@@ -1,0 +1,29 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    
+    - uses: actions/checkout@v4
+
+    - run: rustup toolchain install stable --profile minimal --no-self-update
+    
+    - uses: Swatinem/rust-cache@v2
+
+    - run: |
+        cargo clippy
+        cargo test
+        cargo build --target $(TARGET) --release
