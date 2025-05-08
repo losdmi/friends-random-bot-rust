@@ -88,7 +88,8 @@ fn build_handler() -> UpdateHandler<Error> {
                 .filter_command::<Command>()
                 .branch(case![Command::Start].endpoint(start_handler))
                 .branch(case![Command::Help].endpoint(help_handler))
-                .branch(case!(Command::NextEpisode).endpoint(next_episode_handler)),
+                .branch(case!(Command::NextEpisode).endpoint(next_episode_handler))
+                .branch(case!(Command::ListSeenEpisodes).endpoint(list_seen_episodes_handler)),
         )
         .branch(Update::filter_callback_query().endpoint(callback_handler))
         .branch(Update::filter_message().endpoint(message_handler))
@@ -197,10 +198,20 @@ async fn message_handler(
     if text == MainKeyboardButtons::Moar.to_string() {
         send_next_episode_message(bot, msg, application, watch_url_provider)?.await?;
     } else if text == MainKeyboardButtons::ListSeenEpisodes.to_string() {
-        log::info!("processing list seen episodes");
+        send_seen_episodes(bot, msg, application)?.await?;
     } else {
         send_help_message(bot, msg).await?;
     };
+
+    Ok(())
+}
+
+async fn list_seen_episodes_handler(
+    bot: Bot,
+    msg: Message,
+    application: Arc<Application>,
+) -> HandlerResult {
+    send_seen_episodes(bot, msg, application)?.await?;
 
     Ok(())
 }
@@ -241,4 +252,32 @@ fn send_next_episode_message(
     Ok(bot
         .send_message(msg.chat.id, response.trim())
         .reply_markup(keyboard))
+}
+
+fn send_seen_episodes(
+    bot: Bot,
+    msg: Message,
+    application: Arc<Application>,
+) -> Result<JsonRequest<SendMessage>, application::error::Error> {
+    let user = msg.from.expect("should not be None at this point");
+    let seen_episodes = application.list_seen_episodes(application::UserID::new(user.id.0))?;
+
+    fn episode_to_string(episode: &Episode) -> String {
+        format!("Сезон {} серия {}", episode.season(), episode.episode())
+    }
+
+    let text = format!(
+        r#"
+Просмотренные серии. Наверху недавние, внизу старые:
+
+{}
+"#,
+        seen_episodes.iter().fold(String::new(), |acc, ep| format!(
+            "{}\n{}",
+            episode_to_string(ep),
+            acc,
+        )),
+    );
+
+    Ok(bot.send_message(msg.chat.id, text.trim()))
 }

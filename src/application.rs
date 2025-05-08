@@ -125,6 +125,13 @@ impl Application {
 
         Ok(())
     }
+
+    pub fn list_seen_episodes(&self, user_id: UserID) -> Result<Vec<Episode>, Error> {
+        let user_storage_path = self.build_user_storage_path(user_id);
+        let seen_episodes = self.read_db_from_file(&user_storage_path)?;
+
+        Ok(seen_episodes)
+    }
 }
 
 #[cfg(test)]
