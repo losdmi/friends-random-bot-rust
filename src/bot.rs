@@ -305,7 +305,9 @@ fn send_next_episode_message(
     let next_episode = match application.get_next_episode(application::UserID::new(user.id.0)) {
         Ok(next_episode) => next_episode,
         Err(application::Error::NoUnseenEpisodes) => {
-            return Ok(bot.send_message(msg.chat.id, "Не осталось непросмотренных серий 🙂"));
+            return Ok(bot
+                .send_message(msg.chat.id, "Не осталось непросмотренных серий 🙂")
+                .reply_markup(build_main_keyboard()));
         }
         Err(other) => {
             log::error!("unexpected error: {}", other);

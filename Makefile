@@ -25,8 +25,16 @@ clean:
 build:
 	cross build --target $(TARGET) --release
 
-.PHONY: upload_to_server
-upload_to_server:
+.PHONY: deploy_config
+deploy_config:
+	@test -n "$(REMOTE_SERVER_HOST)" || (echo "Error: env REMOTE_SERVER_HOST is not set"; exit 1)
+	@test -n "$(REMOTE_SERVER_PATH)" || (echo "Error: env REMOTE_SERVER_PATH is not set"; exit 1)
+	
+	$(MAKE) service_stop; true
+	scp config.prod.json $(REMOTE_SERVER_HOST):$(REMOTE_SERVER_PATH)/config.json
+
+.PHONY: deploy_to_server
+deploy_to_server:
 	@test -n "$(REMOTE_SERVER_HOST)" || (echo "Error: env REMOTE_SERVER_HOST is not set"; exit 1)
 	@test -n "$(REMOTE_SERVER_PATH)" || (echo "Error: env REMOTE_SERVER_PATH is not set"; exit 1)
 	
@@ -37,8 +45,8 @@ upload_to_server:
 	ssh $(REMOTE_SERVER_HOST) "systemctl enable $(PROJECT).service"
 	$(MAKE) service_start
 
-.PHONY: build_and_upload_to_server
-build_and_upload_to_server: build upload_to_server
+.PHONY: build_and_deploy_to_server
+build_and_deploy_to_server: build deploy_to_server
 
 .PHONY: service_stop
 service_stop:

@@ -1,4 +1,5 @@
 /target
 config.json
+config.prod.json
 .envrc
 /seen_episodes
