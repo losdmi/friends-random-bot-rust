@@ -17,7 +17,7 @@ variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
 
 cache:
-  key: ${CI_COMMIT_REF_SLUG}
+  key:
     files:
       - Cargo.lock
   paths:
