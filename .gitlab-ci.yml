@@ -3,10 +3,11 @@ stages:          # List of stages for jobs, and their order of execution
   - test
   - deploy
 
-rust-latest:
+lint-test-:
   stage: build
   image: rust:latest
   script:
+    - rustup component add clippy
     - cargo clippy
     - cargo build --verbose
     - cargo test --verbose
