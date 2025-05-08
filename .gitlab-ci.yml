@@ -18,8 +18,8 @@ variables:
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
-    - .cargo/bin
     - .cargo/registry
+    - target/debug/deps
     - target/${CARGO_BUILD_TARGET}/release/deps
     - target/${CARGO_BUILD_TARGET}/release/build
 
@@ -27,11 +27,11 @@ before_script:
   - export "PATH=${CARGO_HOME}/bin:$PATH"
   # - rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --default-toolchain=stable
   # - rustup toolchain install stable --profile minimal --no-self-update
-  - rustup component add clippy
 
 lint:
   stage: lint
   script:
+    - rustup component add clippy
     - cargo clippy
 
 test:
