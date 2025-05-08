@@ -12,16 +12,18 @@ stages:
 
 variables:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
   CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
 
 cache:
   key: ${CI_COMMIT_REF_SLUG}
+    files:
+      - Cargo.lock
   paths:
+    - .cargo/git
     - .cargo/registry
-    - target/debug/deps
-    - target/${CARGO_BUILD_TARGET}/release/deps
-    - target/${CARGO_BUILD_TARGET}/release/build
+    - target/
 
 before_script:
   - export "PATH=${CARGO_HOME}/bin:$PATH"
