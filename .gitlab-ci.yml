@@ -22,6 +22,9 @@ before_script:
   # - rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --default-toolchain=stable
   # - rustup toolchain install stable --profile minimal --no-self-update
 
+after_script:
+  - echo "Cache contents:"; du -sh .cargo target/* || true
+
 lint:
   stage: lint
   cache:
@@ -49,8 +52,7 @@ build:
     key: release
     paths:
       - .cargo/registry
-      - target/release
-      - target/${CARGO_BUILD_TARGET}/release
+      - target
   script:
     - cargo build --target ${CARGO_BUILD_TARGET} --release
   artifacts:
