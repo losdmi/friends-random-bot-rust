@@ -71,7 +71,6 @@ deploy:
     REMOTE_SERVER_PATH: $REMOTE_SERVER_PATH
     PROJECT: $CI_PROJECT_NAME
   before_script:
-    - apt-get update -yqq && apt-get install -y openssh-client
     - mkdir -p ~/.ssh
     - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
