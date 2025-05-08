@@ -53,10 +53,10 @@ build:
       - .cargo/registry
       - target
   script:
-    - cargo build --target ${CARGO_BUILD_TARGET} --release
+    - cargo build --target ${BUILD_TARGET} --release
   artifacts:
     paths:
-      - target/${CARGO_BUILD_TARGET}/release/${CI_PROJECT_NAME}
+      - target/${BUILD_TARGET}/release/${CI_PROJECT_NAME}
     expire_in: 1 week
 
 deploy:
