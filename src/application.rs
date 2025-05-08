@@ -1,10 +1,9 @@
 mod episode;
 mod episodes;
-pub mod error;
 
+pub use super::error::Error;
 pub use episode::Episode;
 use episodes::EPISODES;
-use error::Error;
 use rand::seq::IndexedRandom;
 use std::fs;
 use std::{
@@ -38,14 +37,14 @@ pub struct Application {
 
 impl Application {
     pub fn get_next_episode(&self, user_id: UserID) -> Result<Episode, Error> {
-        let user_storage_path = self.build_user_storage_path(user_id);
+        let user_storage_path = self.build_user_storage_path(&user_id);
         let seen_episodes = self.read_db_from_file(&user_storage_path)?;
         let selected_episode = self.select_next_episode(&seen_episodes)?;
 
         Ok(selected_episode)
     }
 
-    fn build_user_storage_path(&self, user_id: UserID) -> PathBuf {
+    fn build_user_storage_path(&self, user_id: &UserID) -> PathBuf {
         self.storage_path.join(format!("{user_id}.txt"))
     }
 
@@ -84,7 +83,7 @@ impl Application {
     }
 
     pub fn mark_seen(&self, user_id: UserID, episode: Episode) -> Result<(), Error> {
-        let user_storage_path = self.build_user_storage_path(user_id);
+        let user_storage_path = self.build_user_storage_path(&user_id);
         let mut seen_episodes = self.read_db_from_file(&user_storage_path)?;
 
         seen_episodes.push(episode);
@@ -127,10 +126,19 @@ impl Application {
     }
 
     pub fn list_seen_episodes(&self, user_id: UserID) -> Result<Vec<Episode>, Error> {
-        let user_storage_path = self.build_user_storage_path(user_id);
+        let user_storage_path = self.build_user_storage_path(&user_id);
         let seen_episodes = self.read_db_from_file(&user_storage_path)?;
 
         Ok(seen_episodes)
+    }
+
+    pub fn clear_seen_episodes(&self, user_id: UserID) -> Result<(), Error> {
+        let user_storage_path = self.build_user_storage_path(&user_id);
+
+        fs::remove_file(user_storage_path).or_else(|err| match err.kind() {
+            std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err(Error::FileError(err)),
+        })
     }
 }
 
@@ -152,7 +160,7 @@ mod test {
 
         let user_id = UserID(317);
 
-        let result = a.build_user_storage_path(user_id);
+        let result = a.build_user_storage_path(&user_id);
 
         assert_eq!(result, PathBuf::from("seen_episodes/317.txt"));
     }
@@ -286,5 +294,39 @@ mod test {
             test_path.is_dir(),
             "Path should still be a directory after function call"
         );
+    }
+
+    #[test]
+    fn application_clear_seen_episodes_fn_removes_existing_file() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let a = Application {
+            storage_path: temp_dir.path().to_path_buf(),
+        };
+
+        let user_id = UserID(317);
+        let test_file_path = a.build_user_storage_path(&user_id);
+        fs::create_dir_all(test_file_path.parent().unwrap())
+            .expect("не удалось создать папку для тестового файла");
+        File::create(&test_file_path)
+            .expect("не удалось создать тестовый файл")
+            .write_all(b"test data")
+            .expect("не удалось записать в тестовый файл");
+
+        let result = a.clear_seen_episodes(user_id);
+        assert!(!result.is_err(), "result is error: {result:#?}");
+        assert!(!test_file_path.exists(), "File should be deleted");
+    }
+
+    #[test]
+    fn application_clear_seen_episodes_fn_returns_no_error_if_file_does_not_exist() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let app = Application {
+            storage_path: temp_dir.path().to_path_buf(),
+        };
+
+        // Test with non-existent user
+        let result = app.clear_seen_episodes(UserID::new(999));
+
+        assert!(!result.is_err(), "result is error: {result:#?}");
     }
 }

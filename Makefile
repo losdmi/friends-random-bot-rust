@@ -3,6 +3,10 @@ TARGET := x86_64-unknown-linux-gnu
 
 .PHONY: run
 run: test
+	$(MAKE) run_no_lint
+
+.PHONY: run_no_lint
+run_no_lint:
 	cargo run
 
 .PHONY: test

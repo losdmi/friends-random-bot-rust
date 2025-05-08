@@ -2,6 +2,7 @@
 pub enum Error {
     NoUnseenEpisodes,
     FileError(std::io::Error),
+    CallbackCommandParseError(String),
 }
 
 impl std::error::Error for Error {}
@@ -12,6 +13,9 @@ impl std::fmt::Display for Error {
             Error::NoUnseenEpisodes => "Не осталось непросмотренных эпизодов".to_string(),
             Error::FileError(error) => {
                 format!("Ошибка при работе с файлами: {error}")
+            }
+            Error::CallbackCommandParseError(error) => {
+                format!("не удалось распарсить команду из колбека: {error}")
             }
         };
 

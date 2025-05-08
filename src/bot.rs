@@ -1,6 +1,8 @@
+mod callback;
+
 use crate::{
     application::{self, Application, Episode},
-    watch_url_provider,
+    error, watch_url_provider,
 };
 use std::{fmt::Display, sync::Arc};
 use teloxide::{
@@ -20,14 +22,18 @@ type WatchURLProvider = dyn watch_url_provider::WatchURLProvider + Send + Sync;
 #[derive(Clone, Copy)]
 enum MainKeyboardButtons {
     Moar,
+    #[allow(dead_code)]
     ListSeenEpisodes,
+    #[allow(dead_code)]
+    ClearSeenEpisodes,
 }
 
 impl From<MainKeyboardButtons> for String {
     fn from(value: MainKeyboardButtons) -> Self {
         match value {
             MainKeyboardButtons::Moar => String::from("Ещё серию"),
-            MainKeyboardButtons::ListSeenEpisodes => String::from("Просмотренные серии"),
+            MainKeyboardButtons::ListSeenEpisodes => String::from("Показать просмотренные серии"),
+            MainKeyboardButtons::ClearSeenEpisodes => String::from("Очистить просмотренные серии"),
         }
     }
 }
@@ -53,6 +59,8 @@ enum Command {
     NextEpisode,
     /// Показать список просмотренных серий.
     ListSeenEpisodes,
+    /// Очистить список просмотренных серий.
+    ClearSeenEpisodes,
 }
 
 pub async fn new(
@@ -89,7 +97,8 @@ fn build_handler() -> UpdateHandler<Error> {
                 .branch(case![Command::Start].endpoint(start_handler))
                 .branch(case![Command::Help].endpoint(help_handler))
                 .branch(case!(Command::NextEpisode).endpoint(next_episode_handler))
-                .branch(case!(Command::ListSeenEpisodes).endpoint(list_seen_episodes_handler)),
+                .branch(case!(Command::ListSeenEpisodes).endpoint(list_seen_episodes_handler))
+                .branch(case!(Command::ClearSeenEpisodes).endpoint(clear_seen_episodes_handler)),
         )
         .branch(Update::filter_callback_query().endpoint(callback_handler))
         .branch(Update::filter_message().endpoint(message_handler))
@@ -110,7 +119,8 @@ async fn default_handler(upd: Arc<Update>) {
 fn build_main_keyboard() -> KeyboardMarkup {
     KeyboardMarkup::new(vec![
         vec![KeyboardButton::new(MainKeyboardButtons::Moar)],
-        vec![KeyboardButton::new(MainKeyboardButtons::ListSeenEpisodes)],
+        // vec![KeyboardButton::new(MainKeyboardButtons::ListSeenEpisodes)],
+        // vec![KeyboardButton::new(MainKeyboardButtons::ClearSeenEpisodes)],
     ])
     .resize_keyboard()
 }
@@ -150,22 +160,35 @@ async fn callback_handler(
         return Ok(());
     };
 
-    let splitted: Vec<&str> = data.split("=").collect();
-    if splitted.len() != 2 {
-        // ожидаем что в data лежит строка вида `mark_seen=<episode_code>`
-        log::warn!("почему-то в data не то что ожидали: data={}", data);
-        return Ok(());
+    let command = match callback::Command::from_data_string(data) {
+        Ok(command) => command,
+        Err(err) => {
+            log::error!("ошибка при парсинге колбек-команды: {}", err);
+            return Ok(());
+        }
+    };
+
+    match command {
+        callback::Command::MarkSeen(parameter) => {
+            handle_callback_mark_seen(bot, q, application, &parameter).await?
+        }
+        callback::Command::ClearSeenEpisodes(option) => {
+            handle_callback_clear_seen_episodes(bot, q, application, option).await?
+        }
     }
 
-    let command = splitted[0];
-    if command != "mark_seen" {
-        log::warn!("почему-то в command не то что ожидали: command={}", command);
-        return Ok(());
-    }
+    Ok(())
+}
 
+async fn handle_callback_mark_seen(
+    bot: Bot,
+    q: CallbackQuery,
+    application: Arc<Application>,
+    parameter: &str,
+) -> HandlerResult {
     application.mark_seen(
         application::UserID::new(q.from.id.0),
-        Episode::from(splitted[1]),
+        Episode::from(parameter),
     )?;
 
     let Some(message) = q.regular_message() else {
@@ -179,6 +202,44 @@ async fn callback_handler(
         .await?;
 
     Ok(())
+}
+
+async fn handle_callback_clear_seen_episodes(
+    bot: Bot,
+    q: CallbackQuery,
+    application: Arc<Application>,
+    option: callback::ClearSeenEpisodesOption,
+) -> HandlerResult {
+    let Some(message) = q.regular_message() else {
+        return Ok(());
+    };
+    let Some(text) = message.text() else {
+        return Ok(());
+    };
+
+    match option {
+        callback::ClearSeenEpisodesOption::No => {
+            bot.edit_text(
+                message,
+                format!("{text}\n\n❌ Очистка списка просмотренных серий отменена."),
+            )
+            .await?;
+
+            Ok(())
+        }
+        callback::ClearSeenEpisodesOption::Yes => {
+            let user = q.from.clone();
+            application.clear_seen_episodes(application::UserID::new(user.id.0))?;
+
+            bot.edit_text(
+                message,
+                format!("{text}\n\n✅ Список просмотренных серий очищен."),
+            )
+            .await?;
+
+            Ok(())
+        }
+    }
 }
 
 async fn message_handler(
@@ -197,8 +258,10 @@ async fn message_handler(
 
     if text == MainKeyboardButtons::Moar.to_string() {
         send_next_episode_message(bot, msg, application, watch_url_provider)?.await?;
-    } else if text == MainKeyboardButtons::ListSeenEpisodes.to_string() {
-        send_seen_episodes(bot, msg, application)?.await?;
+    // } else if text == MainKeyboardButtons::ListSeenEpisodes.to_string() {
+    // send_seen_episodes(bot, msg, application)?.await?;
+    // } else if text == MainKeyboardButtons::ClearSeenEpisodes.to_string() {
+    // send_clear_seen_episodes_confirmation_request(bot, msg)?.await?;
     } else {
         send_help_message(bot, msg).await?;
     };
@@ -216,6 +279,16 @@ async fn list_seen_episodes_handler(
     Ok(())
 }
 
+async fn clear_seen_episodes_handler(
+    bot: Bot,
+    msg: Message,
+    application: Arc<Application>,
+) -> HandlerResult {
+    send_clear_seen_episodes_confirmation_request(bot, msg, application)?.await?;
+
+    Ok(())
+}
+
 fn send_help_message(bot: Bot, msg: Message) -> JsonRequest<SendMessage> {
     bot.send_message(msg.chat.id, Command::descriptions().to_string())
         .reply_markup(build_main_keyboard())
@@ -226,9 +299,19 @@ fn send_next_episode_message(
     msg: Message,
     application: Arc<Application>,
     watch_url_provider: Arc<WatchURLProvider>,
-) -> Result<JsonRequest<SendMessage>, application::error::Error> {
+) -> Result<JsonRequest<SendMessage>, application::Error> {
     let user = msg.from.expect("should not be None at this point");
-    let next_episode = application.get_next_episode(application::UserID::new(user.id.0))?;
+
+    let next_episode = match application.get_next_episode(application::UserID::new(user.id.0)) {
+        Ok(next_episode) => next_episode,
+        Err(application::Error::NoUnseenEpisodes) => {
+            return Ok(bot.send_message(msg.chat.id, "Не осталось непросмотренных серий 🙂"));
+        }
+        Err(other) => {
+            log::error!("unexpected error: {}", other);
+            return Err(other);
+        }
+    };
 
     let watch_url = watch_url_provider.build_url(&next_episode);
 
@@ -258,9 +341,21 @@ fn send_seen_episodes(
     bot: Bot,
     msg: Message,
     application: Arc<Application>,
-) -> Result<JsonRequest<SendMessage>, application::error::Error> {
+) -> Result<JsonRequest<SendMessage>, application::Error> {
     let user = msg.from.expect("should not be None at this point");
     let seen_episodes = application.list_seen_episodes(application::UserID::new(user.id.0))?;
+
+    if seen_episodes.is_empty() {
+        let text = r#"
+Вы ещё не посмотрели ни одной серии.
+
+Воспользуйтесь командой /next_episode чтобы узнать свою следующую серию для просмотра.
+"#;
+
+        return Ok(bot
+            .send_message(msg.chat.id, text.trim())
+            .reply_markup(build_main_keyboard()));
+    }
 
     fn episode_to_string(episode: &Episode) -> String {
         format!("Сезон {} серия {}", episode.season(), episode.episode())
@@ -279,5 +374,37 @@ fn send_seen_episodes(
         )),
     );
 
-    Ok(bot.send_message(msg.chat.id, text.trim()))
+    Ok(bot
+        .send_message(msg.chat.id, text.trim())
+        .reply_markup(build_main_keyboard()))
+}
+
+fn send_clear_seen_episodes_confirmation_request(
+    bot: Bot,
+    msg: Message,
+    application: Arc<Application>,
+) -> Result<JsonRequest<SendMessage>, application::Error> {
+    let user = msg.from.expect("should not be None at this point");
+    let seen_episodes = application.list_seen_episodes(application::UserID::new(user.id.0))?;
+
+    if seen_episodes.is_empty() {
+        return Ok(bot
+            .send_message(
+                msg.chat.id,
+                "Нечего очищать, список просмотренных серий пуст.",
+            )
+            .reply_markup(build_main_keyboard()));
+    }
+
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback("Да", "clear_seen_episodes=yes"),
+        InlineKeyboardButton::callback("Нет", "clear_seen_episodes=no"),
+    ]]);
+
+    Ok(bot
+        .send_message(
+            msg.chat.id,
+            "Вы точно хотите очистить список просмотренных серий?",
+        )
+        .reply_markup(keyboard))
 }
