@@ -1,3 +1,7 @@
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
 image: rust:latest
 
 stages:
@@ -20,10 +24,9 @@ cache:
 
 before_script:
   - export "PATH=${CARGO_HOME}/bin:$PATH"
-  - rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --default-toolchain=stable
-  - rustup default stable
-  - cargo --version
-  - rustc --version
+  # - rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --default-toolchain=stable
+  # - rustup toolchain install stable --profile minimal --no-self-update
+  - rustup component add clippy
 
 test:
   stage: test
@@ -43,8 +46,6 @@ build:
 deploy:
   stage: deploy
   environment: production
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
   script:
     - echo "Deploying to production..."
     # Add your deployment commands here
