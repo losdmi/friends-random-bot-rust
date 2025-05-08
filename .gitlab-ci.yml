@@ -21,28 +21,36 @@ cache:
     files:
       - Cargo.lock
   paths:
-    - .cargo/git
     - .cargo/registry
-    - target/
 
 before_script:
   - export "PATH=${CARGO_HOME}/bin:$PATH"
+  - echo "Cache contents:"; du -sh .cargo target/*
   # - rustup --version || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile=minimal --default-toolchain=stable
   # - rustup toolchain install stable --profile minimal --no-self-update
 
 lint:
   stage: lint
+  cache:
+    paths:
+      - target/debug
   script:
     - rustup component add clippy
     - cargo clippy
 
 test:
   stage: test
+  cache:
+    paths:
+      - target/debug
   script:
     - cargo test
 
 build:
   stage: build
+  cache:
+    paths:
+      - target/${CARGO_BUILD_TARGET}/release
   script:
     - cargo build --target ${CARGO_BUILD_TARGET} --release
   artifacts:
@@ -53,6 +61,7 @@ build:
 deploy:
   stage: deploy
   environment: production
+  cache: []
   script:
     - echo "Deploying to production..."
     # Add your deployment commands here
