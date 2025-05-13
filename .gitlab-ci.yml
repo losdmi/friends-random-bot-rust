@@ -5,7 +5,6 @@ workflow:
 image: rust:latest
 
 stages:
-  - lint
   - test
   - build
   - deploy
@@ -24,8 +23,8 @@ before_script:
 after_script:
   - echo "Cache contents:"; du -sh .cargo target/* || true
 
-lint:
-  stage: lint
+lint_and_test:
+  stage: test
   cache:
     key: debug
     paths:
@@ -34,15 +33,6 @@ lint:
   script:
     - rustup component add clippy
     - cargo clippy
-
-test:
-  stage: test
-  cache:
-    key: debug
-    paths:
-      - .cargo/registry
-      - target/debug
-  script:
     - cargo test
 
 build:
