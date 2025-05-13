@@ -4,14 +4,17 @@ use crate::{
     application::{self, Application, Episode},
     error, watch_url_provider,
 };
-use std::{fmt::Display, sync::Arc};
+use std::{
+    fmt::Display,
+    sync::{Arc, OnceLock},
+};
 use teloxide::{
     dispatching::UpdateHandler,
     payloads::SendMessage,
     prelude::*,
     requests::JsonRequest,
     sugar::bot::BotMessagesExt,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup, User},
     utils::command::BotCommands,
 };
 
@@ -125,13 +128,41 @@ fn build_main_keyboard() -> KeyboardMarkup {
     .resize_keyboard()
 }
 
+fn log_endpoint_handling(user: Option<&User>, action: &str) {
+    let user = user.unwrap_or_else(|| {
+        static FALLBACK_USER: OnceLock<User> = OnceLock::new();
+        FALLBACK_USER.get_or_init(|| User {
+            id: UserId(404),
+            is_bot: false,
+            first_name: String::from("not-a-user"),
+            last_name: None,
+            username: None,
+            language_code: None,
+            is_premium: false,
+            added_to_attachment_menu: false,
+        })
+    });
+    let user_str = format!(
+        "{} with id={} ( {} )",
+        user.full_name(),
+        user.id,
+        user.preferably_tme_url()
+    );
+
+    log::info!("action: {action} user: {user_str}")
+}
+
 async fn start_handler(bot: Bot, msg: Message) -> HandlerResult {
+    log_endpoint_handling(msg.from.as_ref(), "/start");
+
     send_help_message(bot, msg).await?;
 
     Ok(())
 }
 
 async fn help_handler(bot: Bot, msg: Message) -> HandlerResult {
+    log_endpoint_handling(msg.from.as_ref(), "/help");
+
     send_help_message(bot, msg).await?;
 
     Ok(())
@@ -143,6 +174,8 @@ async fn next_episode_handler(
     application: Arc<Application>,
     watch_url_provider: Arc<WatchURLProvider>,
 ) -> HandlerResult {
+    log_endpoint_handling(msg.from.as_ref(), "/next_episode");
+
     send_next_episode_message(bot, msg, application, watch_url_provider)?.await?;
 
     Ok(())
@@ -153,6 +186,9 @@ async fn callback_handler(
     q: CallbackQuery,
     application: Arc<Application>,
 ) -> HandlerResult {
+    let data = q.data.as_ref().map_or("", |s| s);
+    log_endpoint_handling(Some(&q.from), &format!("callback with data {}", data));
+
     bot.answer_callback_query(&q.id).text("✅").await?;
 
     let Some(data) = q.data.as_ref() else {
@@ -248,6 +284,8 @@ async fn message_handler(
     application: Arc<Application>,
     watch_url_provider: Arc<WatchURLProvider>,
 ) -> HandlerResult {
+    log_endpoint_handling(msg.from.as_ref(), "general_message");
+
     let text = match msg.text() {
         Some(text) => text,
         None => {
@@ -274,6 +312,8 @@ async fn list_seen_episodes_handler(
     msg: Message,
     application: Arc<Application>,
 ) -> HandlerResult {
+    log_endpoint_handling(msg.from.as_ref(), "/list_seen_episodes");
+
     send_seen_episodes(bot, msg, application)?.await?;
 
     Ok(())
@@ -284,6 +324,8 @@ async fn clear_seen_episodes_handler(
     msg: Message,
     application: Arc<Application>,
 ) -> HandlerResult {
+    log_endpoint_handling(msg.from.as_ref(), "/clear_seen_episodes");
+
     send_clear_seen_episodes_confirmation_request(bot, msg, application)?.await?;
 
     Ok(())
