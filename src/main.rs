@@ -1,19 +1,25 @@
 use friends_random_bot_rust::{application, bot, config, watch_url_provider};
-use log::LevelFilter;
 use std::{path::Path, sync::Arc};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() {
-    env_logger::Builder::new()
-        .filter_level(LevelFilter::Info)
-        .parse_env(env_logger::DEFAULT_FILTER_ENV)
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .or_else(|_| EnvFilter::try_new("info")) // Fallback level
+                .expect("error while setting up EnvFilter"),
+        )
+        .with_target(false)
+        .json()
+        .flatten_event(true)
         .init();
 
-    log::info!("Reading config...");
+    tracing::info!("Reading config...");
     let config = match config::new(Path::new("config.json")) {
         Ok(config) => config,
         Err(err) => {
-            log::error!("{err}");
+            tracing::error!("{err}");
             return;
         }
     };
@@ -23,7 +29,7 @@ async fn main() {
         config.watch_url_template,
     ));
 
-    log::info!("Starting bot...");
+    tracing::info!("Starting bot...");
     bot::new(config.bot_token, application, watch_url_provider)
         .await
         .dispatch()

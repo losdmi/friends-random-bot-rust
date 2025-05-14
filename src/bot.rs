@@ -111,12 +111,12 @@ async fn default_handler(upd: Arc<Update>) {
     let upd_as_json = match serde_json::to_string(upd.as_ref()) {
         Ok(json) => json,
         Err(err) => {
-            log::error!("error while converting Update to json: {}", err);
+            tracing::error!("error while converting Update to json: {}", err);
             return;
         }
     };
 
-    log::warn!("Unhandled update: {}", upd_as_json);
+    tracing::warn!(update = upd_as_json, "Unhandled update");
 }
 
 fn build_main_keyboard() -> KeyboardMarkup {
@@ -142,14 +142,14 @@ fn log_endpoint_handling(user: Option<&User>, action: &str) {
             added_to_attachment_menu: false,
         })
     });
-    let user_str = format!(
-        "{} with id={} ( {} )",
-        user.full_name(),
-        user.id,
-        user.preferably_tme_url()
-    );
 
-    log::info!("action: {action} user: {user_str}")
+    tracing::info!(
+        action = action,
+        "user.full_name" = user.full_name(),
+        "user.id" = user.id.0,
+        "user.url" = user.preferably_tme_url().to_string(),
+        "endpoint triggered"
+    )
 }
 
 async fn start_handler(bot: Bot, msg: Message) -> HandlerResult {
@@ -192,14 +192,17 @@ async fn callback_handler(
     bot.answer_callback_query(&q.id).text("✅").await?;
 
     let Some(data) = q.data.as_ref() else {
-        log::error!("получили пустое поле data в колбеке");
+        tracing::error!("получили пустое поле data в колбеке");
         return Ok(());
     };
 
     let command = match callback::Command::from_data_string(data) {
         Ok(command) => command,
         Err(err) => {
-            log::error!("ошибка при парсинге колбек-команды: {}", err);
+            tracing::error!(
+                error = err.to_string(),
+                "ошибка при парсинге колбек-команды"
+            );
             return Ok(());
         }
     };
@@ -352,7 +355,10 @@ fn send_next_episode_message(
                 .reply_markup(build_main_keyboard()));
         }
         Err(other) => {
-            log::error!("unexpected error: {}", other);
+            tracing::error!(
+                error = other.to_string(),
+                "send_next_episode_message unexpected error"
+            );
             return Err(other);
         }
     };
