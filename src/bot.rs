@@ -143,12 +143,19 @@ fn log_endpoint_handling(user: Option<&User>, action: &str) {
         })
     });
 
+    let user_str = format!(
+        "user = {} , id = {} , url = {}",
+        user.full_name(),
+        user.id,
+        user.preferably_tme_url(),
+    );
+
     tracing::info!(
         action = action,
         "user.full_name" = user.full_name(),
         "user.id" = user.id.0,
         "user.url" = user.preferably_tme_url().to_string(),
-        "endpoint triggered"
+        "endpoint triggered: action = {action} , {user_str}",
     )
 }
 
